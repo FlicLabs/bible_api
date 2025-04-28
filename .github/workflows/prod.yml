@@ -12,6 +12,8 @@ jobs:
         steps:
           - name: Checkout code
             uses: actions/checkout@v3
+            with:
+                path: /var/www/apps2/bible_api
 
           - name: Build and serve
             run: |
