@@ -15,7 +15,7 @@ jobs:
 
           - name: Copy files
             run: |
-              sudo cp -r . /var/www/app2/bible_api
+              sudo cp -rf . /var/www/apps/bible_api
 
           - name: Build and serve
             run: |
