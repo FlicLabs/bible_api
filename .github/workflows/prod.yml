@@ -1,0 +1,24 @@
+name: "BIBLE-API"
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+    cicd:
+        runs-on: bible
+
+        steps:
+          - name: Checkout code
+            uses: actions/checkout@v3
+
+          - name: Build and serve
+            run: |
+              gem install bundler
+              bundle config --local deployment true
+              bundle install
+
+          - name: Restart server
+            run: |
+              sudo systemctl restart bible.service
