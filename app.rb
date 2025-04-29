@@ -6,6 +6,7 @@ require 'logger'
 require 'rack/attack'
 require 'redis'
 require 'sinatra/reloader'
+require 'fileutils'
 
 require 'dotenv'
 Dotenv.load
@@ -33,6 +34,9 @@ CORS_HEADERS = {
 }.freeze
 
 set :protection, except: [:json_csrf]
+
+set :public_folder, File.dirname(__FILE__) + '/public'
+set :static, true
 
 def get_verse_id(ref, translation_id, last = false)
   record = DB[
@@ -221,6 +225,83 @@ get '/data/book/:translation/:book_id' do
   }
 
   response.to_json
+end
+
+get '/file/book/:translation/:book_id' do
+  content_type 'application/json', charset: 'utf-8'
+  headers CORS_HEADERS
+
+  host = request.base_url
+  translation = get_translation
+  book_id = params[:book_id]
+  folder_path = "public/book"
+  file_path = "#{folder_path}/#{translation[:identifier]}_#{book_id}.json"
+
+  # Create folder if not exists
+  FileUtils.mkdir_p(folder_path)
+
+  # Check if file exists
+  if File.exist?(file_path)
+    # Build file download URL
+    download_url = "#{host}/book/#{translation[:identifier]}_#{book_id}.json"
+  
+    # Return the download link in response
+    {
+      message: "File generated successfully.",
+      download_url: download_url
+    }.to_json
+  end
+
+  # Fetch data from DB if file doesn't exist
+  verses = DB[
+    'SELECT chapter, verse, text FROM verses WHERE book_id = :book_id AND translation_id = :translation_id ORDER BY chapter, verse',
+    book_id: book_id,
+    translation_id: translation[:id]
+  ].all
+
+  if verses.empty?
+    halt 404, jsonp(error: 'book not found')
+  end
+
+  # Group verses by chapter
+  grouped = {}
+  verses.each do |row|
+    chapter = row[:chapter]
+    verse = row[:verse]
+    text = row[:text]
+
+    grouped[chapter] ||= {}
+    grouped[chapter][verse] = text
+  end
+
+  # Get book name
+  book_name = DB[
+    'SELECT DISTINCT book FROM verses WHERE book_id = :book_id AND translation_id = :translation_id LIMIT 1',
+    book_id: book_id,
+    translation_id: translation[:id]
+  ].get(:book)
+
+  # Prepare response data
+  response = {
+    translation: translation_as_json(translation),
+    book_id: book_id,
+    book_name: book_name,
+    chapter_count: grouped.keys.count,
+    verse_count: verses.count,
+    book_id => grouped
+  }
+
+  # Save response to JSON file
+  File.write(file_path, JSON.pretty_generate(response))
+
+  # Build file download URL
+  download_url = "#{host}/book/#{translation[:identifier]}_#{book_id}.json"
+
+  # Return the download link in response
+  {
+    message: "File generated successfully.",
+    download_url: download_url
+  }.to_json
 end
 
 get '/data/:translation/random' do
