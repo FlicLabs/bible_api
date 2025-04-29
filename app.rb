@@ -237,22 +237,17 @@ get '/file/book/:translation/:book_id' do
   folder_path = "public/book"
   file_path = "#{folder_path}/#{translation[:identifier]}_#{book_id}.json"
 
-  # Create folder if not exists
   FileUtils.mkdir_p(folder_path)
 
-  # Check if file exists
   if File.exist?(file_path)
-    # Build file download URL
     download_url = "#{host}/book/#{translation[:identifier]}_#{book_id}.json"
   
-    # Return the download link in response
     {
-      message: "File generated successfully.",
+      message: "File retrived successfully.",
       download_url: download_url
     }.to_json
   end
 
-  # Fetch data from DB if file doesn't exist
   verses = DB[
     'SELECT chapter, verse, text FROM verses WHERE book_id = :book_id AND translation_id = :translation_id ORDER BY chapter, verse',
     book_id: book_id,
@@ -263,7 +258,6 @@ get '/file/book/:translation/:book_id' do
     halt 404, jsonp(error: 'book not found')
   end
 
-  # Group verses by chapter
   grouped = {}
   verses.each do |row|
     chapter = row[:chapter]
@@ -274,14 +268,12 @@ get '/file/book/:translation/:book_id' do
     grouped[chapter][verse] = text
   end
 
-  # Get book name
   book_name = DB[
     'SELECT DISTINCT book FROM verses WHERE book_id = :book_id AND translation_id = :translation_id LIMIT 1',
     book_id: book_id,
     translation_id: translation[:id]
   ].get(:book)
 
-  # Prepare response data
   response = {
     translation: translation_as_json(translation),
     book_id: book_id,
@@ -291,15 +283,12 @@ get '/file/book/:translation/:book_id' do
     book_id => grouped
   }
 
-  # Save response to JSON file
   File.write(file_path, JSON.pretty_generate(response))
 
-  # Build file download URL
   download_url = "#{host}/book/#{translation[:identifier]}_#{book_id}.json"
 
-  # Return the download link in response
   {
-    message: "File generated successfully.",
+    message: "File retrived successfully.",
     download_url: download_url
   }.to_json
 end

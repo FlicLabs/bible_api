@@ -16,6 +16,9 @@ jobs:
           - name: Copy files
             run: |
               sudo cp -rf . /var/www/apps/bible_api
+              sudo mkdir -p /var/www/apps/bible_api/public
+              sudo mkdir -p /var/www/apps/bible_api/public/book
+              sudo chown -R ubuntu:ubuntu /var/www/apps/bible_api/public
 
           - name: Build and serve
             run: |
