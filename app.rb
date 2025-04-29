@@ -227,71 +227,83 @@ get '/data/book/:translation/:book_id' do
   response.to_json
 end
 
-get '/file/book/:translation/:book_id' do
+get '/file/book/:translation' do
   content_type 'application/json', charset: 'utf-8'
   headers CORS_HEADERS
 
   host = request.base_url
   translation = get_translation
-  book_id = params[:book_id]
   folder_path = "public/book"
-  file_path = "#{folder_path}/#{translation[:identifier]}_#{book_id}.json"
+  file_path = "#{folder_path}/#{translation[:identifier]}.json"
 
   FileUtils.mkdir_p(folder_path)
 
   if File.exist?(file_path)
-    download_url = "#{host}/book/#{translation[:identifier]}_#{book_id}.json"
-  
-    {
-      message: "File retrived successfully.",
+    download_url = "#{host}/book/#{translation[:identifier]}.json"
+    return {
+      message: "File retrieved successfully.",
       download_url: download_url
     }.to_json
   end
 
-  verses = DB[
-    'SELECT chapter, verse, text FROM verses WHERE book_id = :book_id AND translation_id = :translation_id ORDER BY chapter, verse',
-    book_id: book_id,
+  # Step 1: Get all unique book_ids for the translation
+  book_ids = DB[
+    'SELECT DISTINCT book_id FROM verses WHERE translation_id = :translation_id',
     translation_id: translation[:id]
-  ].all
+  ].map { |row| row[:book_id] }
 
-  if verses.empty?
-    halt 404, jsonp(error: 'book not found')
+  all_books = {}
+
+  # Step 2: Loop through each book and fetch verses
+  book_ids.each do |book_id|
+    verses = DB[
+      'SELECT chapter, verse, text FROM verses WHERE book_id = :book_id AND translation_id = :translation_id ORDER BY chapter, verse',
+      book_id: book_id,
+      translation_id: translation[:id]
+    ].all
+
+    next if verses.empty?
+
+    grouped = {}
+    verses.each do |row|
+      chapter = row[:chapter]
+      verse = row[:verse]
+      text = row[:text]
+
+      grouped[chapter] ||= {}
+      grouped[chapter][verse] = text
+    end
+
+    book_name = DB[
+      'SELECT DISTINCT book FROM verses WHERE book_id = :book_id AND translation_id = :translation_id LIMIT 1',
+      book_id: book_id,
+      translation_id: translation[:id]
+    ].get(:book)
+
+    all_books[book_id] = {
+      book_id: book_id,
+      book_name: book_name,
+      chapter_count: grouped.keys.count,
+      verse_count: verses.count,
+      book_id => grouped
+    }
   end
 
-  grouped = {}
-  verses.each do |row|
-    chapter = row[:chapter]
-    verse = row[:verse]
-    text = row[:text]
-
-    grouped[chapter] ||= {}
-    grouped[chapter][verse] = text
-  end
-
-  book_name = DB[
-    'SELECT DISTINCT book FROM verses WHERE book_id = :book_id AND translation_id = :translation_id LIMIT 1',
-    book_id: book_id,
-    translation_id: translation[:id]
-  ].get(:book)
-
+  # Step 3: Final response with translation + books
   response = {
-    translation: translation_as_json(translation),
-    book_id: book_id,
-    book_name: book_name,
-    chapter_count: grouped.keys.count,
-    verse_count: verses.count,
-    book_id => grouped
-  }
+    translation: translation_as_json(translation)
+  }.merge(all_books)
 
+  # Step 4: Save to file
   File.write(file_path, JSON.pretty_generate(response))
 
-  download_url = "#{host}/book/#{translation[:identifier]}_#{book_id}.json"
-
+  # Step 5: Return download URL
   {
-    message: "File retrived successfully.",
-    download_url: download_url
+    message: "File created successfully.",
+    download_url: "#{host}/book/#{translation[:identifier]}.json"
   }.to_json
 end
+
 
 get '/data/:translation/random' do
   content_type 'application/json', charset: 'utf-8'
