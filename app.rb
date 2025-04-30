@@ -155,6 +155,10 @@ get '/data' do
       url: "#{host}/data/#{t.fetch(:identifier)}"
     )
   end
+
+  required_translations = %w[web kjv asv ylt dra bbe darby]
+  translations = translations.select { |t| required_translations.include?(t[:identifier].downcase) }
+ 
   { translations: }.to_json
 end
 
